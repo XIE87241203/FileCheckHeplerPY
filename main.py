@@ -30,7 +30,8 @@ def main():
                 cache_map, search_content_list, ignore_texts
             )
             match_map, mismatch_list = search_helper.start_search()
-            sheet_utils.create_result_sheet(match_map, mismatch_list)
+            link_prefix = sheet_utils.get_link_prefix()
+            sheet_utils.create_result_sheet(match_map, mismatch_list, link_prefix)
         elif function_num == DEL_FILE_FUNCTION_INDEX:
             del_path_list = sheet_utils.get_del_path_list()
             for file_path in del_path_list:

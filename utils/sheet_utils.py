@@ -6,10 +6,13 @@ CACHE_FILE_NAME = "cache.xlsx"
 RESULT_FILE_NAME = "search_result.xlsx"
 SEARCH_CONTENT_SHEET_NAME = "待搜索表"
 SEARCH_RESULT_SHEET_NAME = "搜索结果"
+OTHER_CONFIG_SHEET_NAME = "其他配置"
 DEL_FILE_SHEET_NAME = "待删除文件表"
 FILE_WAREHOUSE_SHEET_NAME = "文件仓库"
 ALL_FILE_NAME_SHEET_NAME = "仓库扫描结果"
-HYPER_LINK_URL = "https://javdb.com/search?f=all&q="
+
+LINK_PREFIX_SHEET_NAME = "跳转网址前缀"
+link_prefix = ""
 
 
 # 检查并创建相关文件
@@ -39,6 +42,11 @@ def create_config_sheet():
     del_file_ws = config_book.create_sheet(title=DEL_FILE_SHEET_NAME)
     del_file_headers = ["待删除文件路径"]
     del_file_ws.append(del_file_headers)
+
+    # 文件仓库路径表
+    other_config_ws = config_book.create_sheet(title=OTHER_CONFIG_SHEET_NAME)
+    other_config_ws.cell(row=1, column=1, value=LINK_PREFIX_SHEET_NAME)  # A列写入 key
+
     # 保存文件
     config_book.save(CONFIG_FILE_NAME)
 
@@ -56,6 +64,7 @@ def get_warehouse_path_list():
     wb.close()  # 必须手动关闭
     return path_list
 
+
 # 读取仓库路径
 def get_del_path_list():
     path_list = []
@@ -69,6 +78,7 @@ def get_del_path_list():
     wb.close()  # 必须手动关闭
     return path_list
 
+
 # 创建索引表
 def create_cache_table(video_map):
     if os.path.exists(CACHE_FILE_NAME):
@@ -81,12 +91,8 @@ def create_cache_table(video_map):
     files_ws = cache_book.active
     files_ws.title = ALL_FILE_NAME_SHEET_NAME
     # 待搜索文件名表
-    files_ws_headers = ["文件名", "文件仓库路径", "文件数"]
+    files_ws_headers = ["文件名", "文件路径", "文件数"]
     files_ws.append(files_ws_headers)
-    # 文件仓库路径表
-    warehouse_ws = cache_book.create_sheet(title=FILE_WAREHOUSE_SHEET_NAME)
-    warehouse_headers = ["文件仓库路径"]
-    warehouse_ws.append(warehouse_headers)
 
     # 遍历字典，写入数据
     for row, (key, value) in enumerate(
@@ -108,6 +114,7 @@ def get_cache_map():
     for row in sheet.iter_rows(min_row=2, values_only=True):  # 从第二行开始
         if row[0]:  # 确保第一列不为空
             cache_map[row[0]] = row[1]  # 第一列为key，第二列为value
+    workbook.close()  # 必须手动关闭
     return cache_map
 
 
@@ -119,10 +126,11 @@ def get_search_content_list():
     for row in sheet.iter_rows(min_row=2, values_only=True):  # 从第二行开始
         if row[0]:  # 确保第一列不为空
             result.append(row[0])
+    workbook.close()  # 必须手动关闭
     return result
 
 
-def create_result_sheet(match_map, mismatch_list):
+def create_result_sheet(match_map, mismatch_list, link_prefix):
     if os.path.exists(RESULT_FILE_NAME):
         os.remove(RESULT_FILE_NAME)  # 删除文件
         print("删除旧的搜索结果文件")
@@ -145,7 +153,7 @@ def create_result_sheet(match_map, mismatch_list):
         link_cell = search_result_ws.cell(
             row=row, column=3, value="访问网址"
         )  # C列写入 链接
-        link_cell.hyperlink = get_hyperlink(key)
+        link_cell.hyperlink = get_hyperlink(link_prefix, key)
         link_cell.style = "Hyperlink"
         index = row + 1
     # 遍历未搜索到的结果，写入数据
@@ -154,12 +162,21 @@ def create_result_sheet(match_map, mismatch_list):
         link_cell = search_result_ws.cell(
             row=index, column=3, value="访问网址"
         )  # C列写入 链接
-        link_cell.hyperlink = get_hyperlink(mismatch)
+        link_cell.hyperlink = get_hyperlink(link_prefix, mismatch)
         link_cell.style = "Hyperlink"
         index += 1
     # 保存文件
     result_book.save(RESULT_FILE_NAME)
 
 
-def get_hyperlink(item_name):
-    return f"{HYPER_LINK_URL}{item_name}"
+def get_link_prefix():
+    wb = load_workbook(CONFIG_FILE_NAME, read_only=True)
+    # 获取仓库表
+    sheet = wb[OTHER_CONFIG_SHEET_NAME]
+    link_prefix = sheet.cell(row=1, column=2).value
+    wb.close()
+    return link_prefix
+
+
+def get_hyperlink(link_prefix, item_name):
+    return f"{link_prefix}{item_name}"

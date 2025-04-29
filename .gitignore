@@ -20,3 +20,6 @@ test-results.xml
 *.swp
 .env
 local_settings.py
+cache.xlsx
+config.xlsx
+search_result.xlsx
