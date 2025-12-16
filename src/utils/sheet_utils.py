@@ -1,0 +1,213 @@
+from openpyxl import Workbook, load_workbook
+import os
+from src.utils.log_utils import LogUtils
+
+CONFIG_FILE_NAME = "config.xlsx"
+CACHE_FILE_NAME = "cache.xlsx"
+RESULT_FILE_NAME = "search_result.xlsx"
+VIDEO_DUPLICATE_REPORT_NAME = "video_duplicate_report.xlsx"
+
+SEARCH_CONTENT_SHEET_NAME = "待搜索表"
+SEARCH_RESULT_SHEET_NAME = "搜索结果"
+OTHER_CONFIG_SHEET_NAME = "其他配置"
+DEL_FILE_SHEET_NAME = "待删除文件表"
+FILE_WAREHOUSE_SHEET_NAME = "文件仓库"
+ALL_FILE_NAME_SHEET_NAME = "仓库扫描结果"
+VIDEO_DUPLICATE_SHEET_NAME = "视频重复项"
+
+LINK_PREFIX_SHEET_NAME = "跳转网址前缀"
+link_prefix = ""
+
+log_utils = LogUtils()
+
+# todo 待更新
+def create_video_duplicate_report_sheet(duplicate_groups):
+    if os.path.exists(VIDEO_DUPLICATE_REPORT_NAME):
+        os.remove(VIDEO_DUPLICATE_REPORT_NAME)
+
+    report_book = Workbook()
+    ws = report_book.active
+    ws.title = VIDEO_DUPLICATE_SHEET_NAME
+
+    max_len = 0
+    for i, group in enumerate(duplicate_groups):
+        # 写入组的标题
+        ws.cell(row=1, column=i + 1, value=f"重复组 {i + 1}")
+        # 将每个重复文件写入该组的列中
+        for j, file_path in enumerate(group):
+            ws.cell(row=j + 2, column=i + 1, value=file_path)
+        if len(group) > max_len:
+            max_len = len(group)
+
+    # 你可以根据需要调整列宽
+    for i in range(1, len(duplicate_groups) + 1):
+        ws.column_dimensions[chr(ord('A') + i - 1)].width = 80
+
+    report_book.save(VIDEO_DUPLICATE_REPORT_NAME)
+
+
+# 检查并创建相关文件
+def check_and_create_config_sheet():
+    if os.path.exists(CONFIG_FILE_NAME):
+        log_utils.log(LogUtils.LOG_LEVEL_INFO, "文件或目录存在，无需初始化配置表")
+        return
+    else:
+        log_utils.log(LogUtils.LOG_LEVEL_INFO, "路径不存在，开始创建配置表")
+        create_config_sheet()
+
+
+def create_config_sheet():
+    # 创建新工作簿（默认包含一个Sheet）
+    config_book = Workbook()
+
+    search_content_ws = config_book.active
+    search_content_ws.title = SEARCH_CONTENT_SHEET_NAME
+    # 待搜索文件名表
+    search_content_headers = ["文件名"]
+    search_content_ws.append(search_content_headers)
+    # 文件仓库路径表
+    warehouse_ws = config_book.create_sheet(title=FILE_WAREHOUSE_SHEET_NAME)
+    warehouse_headers = ["文件仓库路径"]
+    warehouse_ws.append(warehouse_headers)
+    # 待删除文件路径表
+    del_file_ws = config_book.create_sheet(title=DEL_FILE_SHEET_NAME)
+    del_file_headers = ["待删除文件路径"]
+    del_file_ws.append(del_file_headers)
+
+    # 文件仓库路径表
+    other_config_ws = config_book.create_sheet(title=OTHER_CONFIG_SHEET_NAME)
+    other_config_ws.cell(row=1, column=1, value=LINK_PREFIX_SHEET_NAME)  # A列写入 key
+
+    # 保存文件
+    config_book.save(CONFIG_FILE_NAME)
+
+
+# 读取仓库路径
+def get_warehouse_path_list():
+    path_list = []
+    wb = load_workbook(CONFIG_FILE_NAME, read_only=True)
+    # 获取仓库表
+    sheet = wb[FILE_WAREHOUSE_SHEET_NAME]
+    for row in sheet.iter_rows(min_row=2, values_only=True):  # 仅返回值
+        if any(cell is not None for cell in row):  # 过滤全空行
+            path_list.append(row[0])
+    # 处理数据...
+    wb.close()  # 必须手动关闭
+    return path_list
+
+
+# 读取仓库路径
+def get_del_path_list():
+    path_list = []
+    wb = load_workbook(CONFIG_FILE_NAME, read_only=True)
+    # 获取仓库表
+    sheet = wb[FILE_WAREHOUSE_SHEET_NAME]
+    for row in sheet.iter_rows(min_row=2, values_only=True):  # 仅返回值
+        if any(cell is not None for cell in row):  # 过滤全空行
+            path_list.append(row[0])
+    # 处理数据...
+    wb.close()  # 必须手动关闭
+    return path_list
+
+
+# 创建索引表
+def create_cache_table(video_map):
+    if os.path.exists(CACHE_FILE_NAME):
+        os.remove(CACHE_FILE_NAME)  # 删除文件
+        log_utils.log(LogUtils.LOG_LEVEL_INFO, "删除旧的索引文件")
+
+    # 创建新工作簿（默认包含一个Sheet）
+    cache_book = Workbook()
+
+    files_ws = cache_book.active
+    files_ws.title = ALL_FILE_NAME_SHEET_NAME
+    # 待搜索文件名表
+    files_ws_headers = ["文件名", "文件路径", "文件数"]
+    files_ws.append(files_ws_headers)
+
+    # 遍历字典，写入数据
+    for row, (key, value) in enumerate(
+        video_map.items(), start=2
+    ):  # start=2 从第2行开始
+        path = "\n".join(value)
+        files_ws.cell(row=row, column=1, value=key)  # A列写入 key
+        files_ws.cell(row=row, column=2, value=path)  # B列写入 value
+        files_ws.cell(row=row, column=3, value=len(value))  # B列写入相同文件数
+
+    # 保存文件
+    cache_book.save(CACHE_FILE_NAME)
+
+
+def get_cache_map():
+    cache_map = {}
+    workbook = load_workbook(CACHE_FILE_NAME)
+    sheet = workbook[ALL_FILE_NAME_SHEET_NAME]
+    for row in sheet.iter_rows(min_row=2, values_only=True):  # 从第二行开始
+        if row[0]:  # 确保第一列不为空
+            cache_map[row[0]] = row[1]  # 第一列为key，第二列为value
+    workbook.close()  # 必须手动关闭
+    return cache_map
+
+
+# 获取带搜索列表
+def get_search_content_list():
+    result = []
+    workbook = load_workbook(CONFIG_FILE_NAME)
+    sheet = workbook[SEARCH_CONTENT_SHEET_NAME]
+    for row in sheet.iter_rows(min_row=2, values_only=True):  # 从第二行开始
+        if row[0]:  # 确保第一列不为空
+            result.append(row[0])
+    workbook.close()  # 必须手动关闭
+    return result
+
+
+def create_result_sheet(match_map, mismatch_list, link_prefix):
+    if os.path.exists(RESULT_FILE_NAME):
+        os.remove(RESULT_FILE_NAME)  # 删除文件
+        log_utils.log(LogUtils.LOG_LEVEL_INFO, "删除旧的搜索结果文件")
+
+    # 创建新工作簿（默认包含一个Sheet）
+    result_book = Workbook()
+
+    search_result_ws = result_book.active
+    search_result_ws.title = SEARCH_RESULT_SHEET_NAME
+    # 搜索结果标题
+    search_result_ws_headers = ["文件名", "文件路径", "网站链接"]
+    search_result_ws.append(search_result_ws_headers)
+    index = 0
+    # 遍历字典，写入搜索到的数据
+    for row, (key, value) in enumerate(
+        match_map.items(), start=2
+    ):  # start=2 从第2行开始
+        search_result_ws.cell(row=row, column=1, value=key)  # A列写入 key
+        search_result_ws.cell(row=row, column=2, value=value)  # B列写入 value
+        link_cell = search_result_ws.cell(
+            row=row, column=3, value="访问网址"
+        )  # C列写入 链接
+        link_cell.hyperlink = get_hyperlink(link_prefix, key)
+        link_cell.style = "Hyperlink"
+        index = row + 1
+    # 遍历未搜索到的结果，写入数据
+    for mismatch in mismatch_list:
+        search_result_ws.cell(row=index, column=1, value=mismatch)  # A列写入 名字
+        link_cell = search_result_ws.cell(
+            row=index, column=3, value="访问网址"
+        )  # C列写入 链接
+        link_cell.hyperlink = get_hyperlink(link_prefix, mismatch)
+        link_cell.style = "Hyperlink"
+        index += 1
+    # 保存文件
+    result_book.save(RESULT_FILE_NAME)
+
+
+def get_link_prefix():
+    wb = load_workbook(CONFIG_FILE_NAME, read_only=True)
+    # 获取仓库表
+    sheet = wb[OTHER_CONFIG_SHEET_NAME]
+    link_prefix = sheet.cell(row=1, column=2).value
+    wb.close()
+    return link_prefix
+
+
+def get_hyperlink(link_prefix, item_name):
+    return f"{link_prefix}{item_name}"
