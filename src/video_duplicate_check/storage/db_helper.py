@@ -6,6 +6,7 @@
 import sqlite3
 import os
 import threading
+from typing import Final, Optional
 
 
 class DBHelper:
@@ -15,102 +16,92 @@ class DBHelper:
     _instance = None
     _lock = threading.Lock()
 
-    # 数据库文件名
-    DB_NAME = 'fileCheckHelper.db'
-    # 数据库版本，用于数据库迁移
-    DB_VERSION = 1
-    # 视频特征表
-    TABLE_VIDEO_FEATURES = 'video_features'
-    # 视频信息缓存表
-    TABLE_VIDEO_INFO_CACHE = 'video_info_cache'
+    # 静态常量
+    DB_NAME: Final[str] = 'fileCheckHelper.db'
+    DB_VERSION: Final[int] = 1
+    TABLE_VIDEO_FEATURES: Final[str] = 'video_features'
+    TABLE_VIDEO_INFO_CACHE: Final[str] = 'video_info_cache'
+    DB_DIR: Final[str] = 'db'
 
     def __new__(cls, *args, **kwargs):
         """
-        实现线程安全的单例模式，确保全局只有一个DBHelper实例。
+        实现线程安全的单例模式。
 
-        :param args: 位置参数。
-        :param kwargs: 关键字参数。
-        :return: DBHelper的单例实例。
+        :param args: 可变位置参数。
+        :param kwargs: 可变关键字参数。
+        :return: DBHelper 的单例对象。
         """
         if not cls._instance:
             with cls._lock:
-                # 再次检查，防止多线程环境下重复创建实例
                 if not cls._instance:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, db_dir: str = 'db'):
+    def __init__(self):
         """
-        初始化数据库辅助类。
-        由于是单例，此构造方法仅在第一次实例化时执行一次。
-
-        :param db_dir: 数据库文件所在的目录，默认为 'db'。
+        初始化数据库辅助类，配置数据库路径并初始化表结构。
         """
-        # 防止重复初始化
         if hasattr(self, '_initialized'):
             return
 
         base_dir = os.getcwd()
-        db_path = os.path.join(base_dir, db_dir, self.DB_NAME)
+        # 使用类名访问静态常量
+        db_path = os.path.join(base_dir, DBHelper.DB_DIR, DBHelper.DB_NAME)
         self.db_path = db_path
-        # 确保数据库文件所在的目录存在
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
-        # 初始化时创建或更新表
         self._create_or_update_tables()
         self._initialized = True
 
     def _create_or_update_tables(self):
         """
-        创建或更新数据库表结构，并根据DB_VERSION进行版本适配。
+        创建或更新数据库表结构，处理版本管理。
         """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-
-            # 获取当前数据库版本
             cursor.execute("PRAGMA user_version")
             current_version = cursor.fetchone()[0]
 
-            # 仅在需要时进行基础表创建
             self._create_base_tables(cursor)
+            self._update_db(current_version)
 
-            # --- 数据库版本迁移 --- #
-            self._update_db(self, current_version)
-            # if current_version < 1:
-            # 版本 1 迁移：为 video_info_cache 表添加 alias 列
-
-            # --- 迁移结束 --- #
-
-            # 如果版本已更新，则设置新的数据库版本
-            if current_version != self.DB_VERSION:
-                cursor.execute(f"PRAGMA user_version = {self.DB_VERSION}")
-
+            if current_version != DBHelper.DB_VERSION:
+                cursor.execute(f"PRAGMA user_version = {DBHelper.DB_VERSION}")
             conn.commit()
 
-    def _update_db(self, old_version, new_version=DB_VERSION):
+    def _update_db(self, old_version: int, new_version: int = DB_VERSION):
+        """
+        执行数据库升级逻辑。
+
+        :param old_version: 当前数据库版本。
+        :param new_version: 目标数据库版本。
+        """
         return
 
-    def _create_base_tables(self, cursor):
+    @staticmethod
+    def _create_base_tables(cursor: sqlite3.Cursor):
         """
-        创建项目所需的基础数据表，如果表不存在的话。
+        创建基础数据表。
 
         :param cursor: 数据库游标。
         """
-        # 创建 video_features 表
+        # 使用类名访问静态常量
+        # 视频特征表：存储 MD5 和感知哈希
         cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS {self.TABLE_VIDEO_FEATURES} (
-                md5 TEXT PRIMARY KEY NOT NULL,
-                signature TEXT NOT NULL,
-                alias TEXT NOT NULL
+            CREATE TABLE IF NOT EXISTS {DBHelper.TABLE_VIDEO_FEATURES} (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                md5 TEXT NOT NULL UNIQUE,
+                video_hashes TEXT
             )
         ''')
-        # 创建 video_info_cache 表
+        # 视频信息缓存表：存储文件路径、名称、时长及特征引用
         cursor.execute(f'''
-            CREATE TABLE IF NOT EXISTS {self.TABLE_VIDEO_INFO_CACHE} (
+            CREATE TABLE IF NOT EXISTS {DBHelper.TABLE_VIDEO_INFO_CACHE} (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 path TEXT NOT NULL UNIQUE,
                 video_name TEXT NOT NULL,
                 md5 TEXT NOT NULL,
-                signatures TEXT
+                duration REAL,
+                video_hashes TEXT
             )
         ''')
 
@@ -118,15 +109,18 @@ class DBHelper:
         """
         获取一个新的数据库连接。
 
-        :return: 数据库连接对象。
+        :return: 返回一个新的 sqlite3.Connection 实例。
         """
         return sqlite3.connect(self.db_path)
 
-    def close_connection(self, conn: sqlite3.Connection):
+    def close_connection(self, conn: Optional[sqlite3.Connection]):
         """
-        关闭一个数据库连接。
+        关闭指定的数据库连接。
 
         :param conn: 要关闭的数据库连接对象。
         """
         if conn:
-            conn.close()
+            try:
+                conn.close()
+            except Exception:
+                pass

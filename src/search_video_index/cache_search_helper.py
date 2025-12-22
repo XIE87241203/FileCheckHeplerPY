@@ -1,6 +1,6 @@
 import re
 from typing import List, Dict, Tuple
-from src.utils.log_utils import LogUtils
+from src.utils.log_utils import logger
 
 
 class CacheSearchHelper:
@@ -21,7 +21,6 @@ class CacheSearchHelper:
         self.cache_map = cache_map  # 文件缓存，{文件名: 文件路径}
         self.search_content_list = search_content_list  # 需要搜索的内容列表
         self.ignore_texts = ignore_texts  # 搜索时需要忽略的特殊文本
-        self.log_utils = LogUtils()
 
     def start_search(self) -> Tuple[Dict[str, str], List[str]]:
         """
@@ -51,7 +50,7 @@ class CacheSearchHelper:
                 regex = re.compile(f".*{pattern_str}.*")
             except re.error as e:
                 # 如果创建正则表达式失败（例如，模式包含无效的语法），则记录错误并跳过。
-                self.log_utils.log(LogUtils.LOG_LEVEL_ERROR, f"为'{content}'创建正则表达式失败: {e}")
+                logger.error(f"为'{content}'创建正则表达式失败: {e}")
                 mismatch_list.append(content)
                 continue  # 继续处理下一个搜索内容
 

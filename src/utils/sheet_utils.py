@@ -1,6 +1,6 @@
 from openpyxl import Workbook, load_workbook
 import os
-from src.utils.log_utils import LogUtils
+from src.utils.log_utils import logger
 
 CONFIG_FILE_NAME = "config.xlsx"
 CACHE_FILE_NAME = "cache.xlsx"

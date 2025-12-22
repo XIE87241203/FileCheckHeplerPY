@@ -3,19 +3,18 @@ from typing import List
 import utils.sheet_utils as sheet_utils
 from get_video_index.file_warehouse import FileWarehouse
 from search_video_index.cache_search_helper import CacheSearchHelper
-from video_duplicate_check.video_duplicate_checker import VideoDuplicateChecker
 import os
-from utils.log_utils import LogUtils
+
+from src.video_duplicate_check.utils.video_cache_manager import VideoCacheManager
+from src.video_duplicate_check.video_duplicate_checker import VideoDuplicateChecker
+from utils.log_utils import logger
 
 # 定义功能索引的常量
 REFRESH_CACHE_FUNCTION_INDEX = "1"  # 刷新缓存功能
 SEARCH_NAME_FUNCTION_INDEX = "2"  # 搜索名称功能
 DEL_FILE_FUNCTION_INDEX = "3"  # 删除文件功能
 VIDEO_DUPLICATE_CHECK_FUNCTION_INDEX = "4"  # 视频查重功能
-# todo 增加一个选项用于清空VideoInfoCacheStorage
-
-log_utils = LogUtils()
-
+CLEAR_VIDEO_DUPLICATE_CACHE_FUNCTION_INDEX = "5"  # 清空视频查重缓存功能
 
 # 使用pyinstaller --onefile --name=MyApp main.py 打包成exe
 
@@ -33,7 +32,7 @@ def main():
     # 开始主循环，让用户选择功能
     while var == 1:
         function_num = input(
-            "请输入序号选择功能：\n1.刷新文件库的文件索引。\n2.通过索引查找重复的文件\n3.删除“待删除表”内的文件\n4.视频查重\n输入其他字符结束程序\n"
+            "请输入序号选择功能：\n1.刷新文件库的文件索引。\n2.通过索引查找重复的文件\n3.删除“待删除表”内的文件\n4.视频查重\n5.清空视频查重缓存\n输入其他字符结束程序\n"
         )  # 提示用户输入
         # 根据用户的输入选择不同的功能
         if function_num == REFRESH_CACHE_FUNCTION_INDEX:
@@ -45,46 +44,41 @@ def main():
             del_file()
         elif function_num == VIDEO_DUPLICATE_CHECK_FUNCTION_INDEX:
             check_video_duplicates()
+        elif function_num == CLEAR_VIDEO_DUPLICATE_CACHE_FUNCTION_INDEX:
+            clear_video_duplicates_cache()
         else:
             # 结束循环
             var = -1
-            log_utils.log(LogUtils.LOG_LEVEL_INFO, "结束程序。")
+            logger.info("结束程序。")
+
+
+def clear_video_duplicates_cache():
+    """
+    清空视频查重相关的缓存数据库。
+    """
+    confirm = input("确定要清空所有视频查重缓存吗？(y/n): ").strip().lower()
+    if confirm == 'y':
+        cache_manager = VideoCacheManager()
+        cache_manager.clear_all_cache()
+        logger.info("视频查重缓存已清空。")
+    else:
+        logger.info("取消清空缓存操作。")
 
 
 def check_video_duplicates():
     """
     检查视频重复项。
     """
-    try:
-        precision = int(input("请输入查重精度（建议为5-10的整数）："))
-    except ValueError:
-        log_utils.log(LogUtils.LOG_LEVEL_ERROR, "精度必须是整数。")
+    path = input("请输入要查重的文件夹路径: ").strip()
+    if not os.path.exists(path):
+        logger.error(f"路径不存在: {path}")
+        return
+    if not os.path.isdir(path):
+        logger.error(f"输入的不是文件夹路径: {path}")
         return
 
-    try:
-        checker = VideoDuplicateChecker()
-    except FileNotFoundError as e:
-        log_utils.log(LogUtils.LOG_LEVEL_ERROR, e)
-        return
-
-    log_utils.log(LogUtils.LOG_LEVEL_INFO, "开始获取视频文件列表...")
-    cache_map = sheet_utils.get_cache_map()
-    video_paths = []
-    for path_str in cache_map.values():
-        if path_str:
-            video_paths.extend(path_str.split('\n'))
-
-    video_paths = list(set(video_paths))  # 去重
-
-    duplicate_groups = checker.find_duplicates(video_paths, precision)
-
-    if not duplicate_groups:
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, "未找到重复的视频。")
-        return
-
-    log_utils.log(LogUtils.LOG_LEVEL_INFO, f"找到 {len(duplicate_groups)} 组重复的视频。")
-    sheet_utils.create_video_duplicate_report_sheet(duplicate_groups)
-    log_utils.log(LogUtils.LOG_LEVEL_INFO, f"重复项报告已生成: {sheet_utils.VIDEO_DUPLICATE_REPORT_NAME}")
+    video_duplicate_checker = VideoDuplicateChecker(path)
+    video_duplicate_checker.start()
 
 
 def del_file():
@@ -92,7 +86,7 @@ def del_file():
     del_path_list = sheet_utils.get_del_path_list()
     # 遍历并删除文件
     for file_path in del_path_list:
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, f"删除：{file_path}")
+        logger.info(f"删除：{file_path}")
         os.remove(file_path)
 
 
@@ -120,13 +114,12 @@ def refresh_file_name_cache():
     """
     # 从表格中获取仓库路径
     warehouse_path_list = sheet_utils.get_warehouse_path_list()
-    log_utils.log(LogUtils.LOG_LEVEL_INFO, f"读取仓库：{warehouse_path_list}")
+    logger.info(f"读取仓库：{warehouse_path_list}")
     # 初始化文件仓库
     file_warehouse = FileWarehouse(warehouse_path_list)
     # 扫描视频文件
     video_map = file_warehouse.scan_videos()
-    log_utils.log(
-        LogUtils.LOG_LEVEL_INFO,
+    logger.info(
         f"读取文件库成功，一共有{len(video_map)}个文件",
     )
     # 创建缓存表格

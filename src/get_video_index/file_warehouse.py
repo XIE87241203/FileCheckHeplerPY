@@ -1,6 +1,6 @@
 import os
 from collections import defaultdict
-from src.utils.log_utils import LogUtils
+from src.utils.log_utils import logger
 
 
 class FileWarehouse:
@@ -25,7 +25,6 @@ class FileWarehouse:
         # 初始化一个默认字典（defaultdict）。当访问一个不存在的键时，会自动创建一个空列表作为默认值。
         # 这简化了后续添加文件路径的代码。
         self.video_map = defaultdict(list)
-        self.log_utils = LogUtils()
 
     def _is_video_file(self, file_name):
         """
@@ -69,7 +68,7 @@ class FileWarehouse:
         # 使用 enumerate() 遍历目录列表，同时获取索引和值，用于打印进度。start=1 表示索引从1开始。
         for i, directory in enumerate(self.dir_path_list, 1):
             # 打印当前扫描的目录和进度
-            self.log_utils.log(LogUtils.LOG_LEVEL_INFO, f'正在读取 "{directory}" 中，进度：{i}/{len(self.dir_path_list)}')
+            logger.info(f'正在读取 "{directory}" 中，进度：{i}/{len(self.dir_path_list)}', self)
             # 调用内部方法来查找并记录该目录下的所有视频文件
             self._find_videos_in_dir(directory)
         # 返回最终收集到的包含所有视频文件信息的字典
