@@ -1,6 +1,7 @@
 from openpyxl import Workbook, load_workbook
 import os
-from src.utils.log_utils import logger
+
+from src.utils.log_utils import logger, LogUtils
 
 CONFIG_FILE_NAME = "config.xlsx"
 CACHE_FILE_NAME = "cache.xlsx"
@@ -17,8 +18,6 @@ VIDEO_DUPLICATE_SHEET_NAME = "视频重复项"
 
 LINK_PREFIX_SHEET_NAME = "跳转网址前缀"
 link_prefix = ""
-
-log_utils = LogUtils()
 
 # todo 待更新
 def create_video_duplicate_report_sheet(duplicate_groups):
@@ -49,10 +48,10 @@ def create_video_duplicate_report_sheet(duplicate_groups):
 # 检查并创建相关文件
 def check_and_create_config_sheet():
     if os.path.exists(CONFIG_FILE_NAME):
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, "文件或目录存在，无需初始化配置表")
+        logger.log(LogUtils.LOG_LEVEL_INFO, "文件或目录存在，无需初始化配置表")
         return
     else:
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, "路径不存在，开始创建配置表")
+        logger.log(LogUtils.LOG_LEVEL_INFO, "路径不存在，开始创建配置表")
         create_config_sheet()
 
 
@@ -114,7 +113,7 @@ def get_del_path_list():
 def create_cache_table(video_map):
     if os.path.exists(CACHE_FILE_NAME):
         os.remove(CACHE_FILE_NAME)  # 删除文件
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, "删除旧的索引文件")
+        logger.log(LogUtils.LOG_LEVEL_INFO, "删除旧的索引文件")
 
     # 创建新工作簿（默认包含一个Sheet）
     cache_book = Workbook()
@@ -164,7 +163,7 @@ def get_search_content_list():
 def create_result_sheet(match_map, mismatch_list, link_prefix):
     if os.path.exists(RESULT_FILE_NAME):
         os.remove(RESULT_FILE_NAME)  # 删除文件
-        log_utils.log(LogUtils.LOG_LEVEL_INFO, "删除旧的搜索结果文件")
+        logger.log(LogUtils.LOG_LEVEL_INFO, "删除旧的搜索结果文件")
 
     # 创建新工作簿（默认包含一个Sheet）
     result_book = Workbook()
